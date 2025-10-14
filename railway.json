@@ -1,0 +1,12 @@
+{
+  "name": "visecure-backend",
+  "build": {
+    "command": "npm install"
+  },
+  "start": {
+    "command": "npm start"
+  },
+  "healthcheck": {
+    "path": "/api/health"
+  }
+}
