@@ -23,15 +23,23 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // CORS Configuration
-const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
+const getAllowedOrigins = () => {
+  if (process.env.ALLOWED_ORIGINS) {
+    return process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim());
+  }
+  
+  return process.env.NODE_ENV === 'production' 
     ? [
         'https://visecure.netlify.app',
         'https://your-frontend-domain.com',
         'http://localhost:3000', // Allow localhost for testing
         'http://127.0.0.1:3000'
       ]
-    : ['http://localhost:3000', 'http://127.0.0.1:3000'], // Specific origins for development
+    : ['http://localhost:3000', 'http://127.0.0.1:3000'];
+};
+
+const corsOptions = {
+  origin: getAllowedOrigins(),
   credentials: true,
   optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
