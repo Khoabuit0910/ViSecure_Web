@@ -25,10 +25,17 @@ app.use(limiter);
 // CORS Configuration
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
-    ? ['https://your-frontend-domain.com', 'http://localhost:3000'] // Add frontend URL when deployed
-    : true, // Allow all origins in development (for mobile app testing)
+    ? [
+        'https://visecure.netlify.app',
+        'https://your-frontend-domain.com',
+        'http://localhost:3000', // Allow localhost for testing
+        'http://127.0.0.1:3000'
+      ]
+    : ['http://localhost:3000', 'http://127.0.0.1:3000'], // Specific origins for development
   credentials: true,
-  optionsSuccessStatus: 200
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 };
 
 app.use(cors(corsOptions));
