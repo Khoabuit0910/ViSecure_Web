@@ -180,6 +180,10 @@ userSchema.methods.updateLastLogin = function() {
 };
 
 userSchema.methods.hasPermission = function(permission) {
+  // Admin has all permissions
+  if (this.role === 'admin') {
+    return true;
+  }
   return this.permissions.includes(permission);
 };
 

@@ -93,14 +93,15 @@ const requirePermission = (permission) => {
         });
       }
 
-      if (!user.hasPermission(permission)) {
-        return res.status(403).json({
-          error: 'Insufficient Permissions',
-          message: `Không có quyền ${permission}`
-        });
+      // Admin has all permissions
+      if (user.role === 'admin' || user.hasPermission(permission)) {
+        return next();
       }
 
-      next();
+      return res.status(403).json({
+        error: 'Insufficient Permissions',
+        message: `Không có quyền ${permission}`
+      });
     } catch (error) {
       console.error('Permission middleware error:', error);
       res.status(500).json({
@@ -116,6 +117,81 @@ const adminOnly = requireRole('admin');
 
 // Editor or Admin middleware
 const editorOrAdmin = requireRole(['editor', 'admin']);
+
+// News management permissions - Admin has full access
+const newsCreate = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Yêu cầu đăng nhập để tạo tin tức'
+    });
+  }
+  
+  // Admin and editor can create news
+  if (['admin', 'editor'].includes(req.user.role)) {
+    return next();
+  }
+  
+  return res.status(403).json({
+    error: 'Forbidden',
+    message: 'Không có quyền tạo tin tức'
+  });
+};
+
+const newsRead = (req, res, next) => {
+  // Public can read published news, admin/editor can read all
+  next();
+};
+
+const newsUpdate = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Yêu cầu đăng nhập để cập nhật tin tức'
+    });
+  }
+  
+  // Admin has full update access
+  if (req.user.role === 'admin') {
+    return next();
+  }
+  
+  // Editor can update their own news (checked in route handler)
+  if (req.user.role === 'editor') {
+    req.checkOwnership = true;
+    return next();
+  }
+  
+  return res.status(403).json({
+    error: 'Forbidden',
+    message: 'Không có quyền cập nhật tin tức'
+  });
+};
+
+const newsDelete = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Yêu cầu đăng nhập để xóa tin tức'
+    });
+  }
+  
+  // Admin has full delete access
+  if (req.user.role === 'admin') {
+    return next();
+  }
+  
+  // Editor can delete their own news (checked in route handler)
+  if (req.user.role === 'editor') {
+    req.checkOwnership = true;
+    return next();
+  }
+  
+  return res.status(403).json({
+    error: 'Forbidden',
+    message: 'Không có quyền xóa tin tức'
+  });
+};
 
 // Optional auth middleware (for public routes that can benefit from user context)
 const optionalAuth = async (req, res, next) => {
@@ -183,5 +259,9 @@ module.exports = {
   adminOnly,
   editorOrAdmin,
   optionalAuth,
-  requireOwnership
+  requireOwnership,
+  newsCreate,
+  newsRead,
+  newsUpdate,
+  newsDelete
 };

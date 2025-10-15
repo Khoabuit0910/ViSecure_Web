@@ -1,7 +1,7 @@
 const express = require('express');
 const { body, validationResult, query } = require('express-validator');
 const News = require('../models/News');
-const { auth, requirePermission, optionalAuth, requireOwnership } = require('../middleware/auth');
+const { auth, requirePermission, optionalAuth, requireOwnership, adminOnly, editorOrAdmin, newsCreate, newsRead, newsUpdate, newsDelete } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -247,7 +247,7 @@ router.post('/', [
     .optional()
     .isIn(['low', 'normal', 'high', 'urgent'])
     .withMessage('Mức độ ưu tiên không hợp lệ')
-], auth, requirePermission('create_news'), async (req, res) => {
+], auth, newsCreate, async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -349,7 +349,7 @@ router.put('/:id', [
     .optional()
     .isIn(['low', 'normal', 'high', 'urgent'])
     .withMessage('Mức độ ưu tiên không hợp lệ')
-], auth, requirePermission('edit_news'), async (req, res) => {
+], auth, newsUpdate, async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -371,17 +371,19 @@ router.put('/:id', [
       });
     }
 
-    // Check ownership (authors can only edit their own news, admins can edit any)
-    if (user.role !== 'admin' && news.author.email !== user.email) {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'Bạn chỉ có thể chỉnh sửa tin tức của mình'
-      });
+    // Check ownership - Admin has full access, Editor can edit their own news
+    if (req.checkOwnership && user.role !== 'admin') {
+      if (news.author.email !== user.email) {
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: 'Bạn chỉ có thể chỉnh sửa tin tức của mình'
+        });
+      }
     }
 
-    // Check if user can publish news
+    // Check publishing permission - Admin can always publish, editor needs permission
     const { status } = req.body;
-    if (status === 'published' && !user.hasPermission('publish_news')) {
+    if (status === 'published' && user.role !== 'admin' && !user.hasPermission('publish_news')) {
       return res.status(403).json({
         error: 'Insufficient Permissions',
         message: 'Bạn không có quyền xuất bản tin tức'
@@ -396,7 +398,7 @@ router.put('/:id', [
     ];
 
     // Only editors and admins can change status
-    if (user.hasPermission('publish_news')) {
+    if (user.role === 'admin' || user.hasPermission('publish_news')) {
       allowedUpdates.push('status');
     }
 
@@ -432,7 +434,7 @@ router.put('/:id', [
 // @route   DELETE /api/news/:id
 // @desc    Delete news
 // @access  Private (requires delete_news permission + ownership check)
-router.delete('/:id', auth, requirePermission('delete_news'), async (req, res) => {
+router.delete('/:id', auth, newsDelete, async (req, res) => {
   try {
     const newsId = req.params.id;
     const user = req.userModel;
@@ -445,12 +447,13 @@ router.delete('/:id', auth, requirePermission('delete_news'), async (req, res) =
       });
     }
 
-    // Check ownership (only admins and editors can delete, or author for their own drafts)
-    if (user.role !== 'admin' && user.role !== 'editor') {
-      if (news.author.email !== user.email || news.status !== 'draft') {
+    // Check ownership - Admin has full delete access
+    if (req.checkOwnership && user.role !== 'admin') {
+      // Editor can only delete their own news
+      if (news.author.email !== user.email) {
         return res.status(403).json({
           error: 'Forbidden',
-          message: 'Bạn chỉ có thể xóa bản thảo của mình'
+          message: 'Bạn chỉ có thể xóa tin tức của mình'
         });
       }
     }
@@ -533,6 +536,265 @@ router.post('/:id/share', async (req, res) => {
     res.status(500).json({
       error: 'Server Error',
       message: 'Lỗi server khi chia sẻ tin tức'
+    });
+  }
+});
+
+// @route   GET /api/news/stats
+// @desc    Get news statistics for admin dashboard
+// @access  Private (Admin only)
+router.get('/stats', auth, adminOnly, async (req, res) => {
+  try {
+    const [
+      totalNews,
+      publishedNews,
+      draftNews,
+      archivedNews,
+      breakingNews,
+      featuredNews,
+      categoryStats,
+      viewsStats
+    ] = await Promise.all([
+      // Total news count
+      News.countDocuments(),
+      
+      // Published news count
+      News.countDocuments({ status: 'published' }),
+      
+      // Draft news count  
+      News.countDocuments({ status: 'draft' }),
+      
+      // Archived news count
+      News.countDocuments({ status: 'archived' }),
+      
+      // Breaking news count
+      News.countDocuments({ isBreaking: true, status: 'published' }),
+      
+      // Featured news count
+      News.countDocuments({ isFeatured: true, status: 'published' }),
+      
+      // Category distribution
+      News.aggregate([
+        { $match: { status: 'published' } },
+        { $group: { _id: '$category', count: { $sum: 1 } } },
+        { $sort: { count: -1 } }
+      ]),
+      
+      // Views statistics
+      News.aggregate([
+        { $match: { status: 'published' } },
+        {
+          $group: {
+            _id: null,
+            totalViews: { $sum: '$views' },
+            avgViews: { $avg: '$views' },
+            maxViews: { $max: '$views' }
+          }
+        }
+      ])
+    ]);
+
+    // Recent publishing trend (last 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    const recentTrend = await News.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: sevenDaysAgo },
+          status: 'published'
+        }
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: {
+              format: '%Y-%m-%d',
+              date: '$createdAt'
+            }
+          },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    // Top performing news (by views)
+    const topNews = await News.find({ status: 'published' })
+      .sort({ views: -1 })
+      .limit(5)
+      .select('title views createdAt category');
+
+    const stats = {
+      overview: {
+        totalNews,
+        publishedNews,
+        draftNews,
+        archivedNews,
+        breakingNews,
+        featuredNews
+      },
+      views: viewsStats[0] || { totalViews: 0, avgViews: 0, maxViews: 0 },
+      categories: categoryStats.map(cat => ({
+        category: cat._id,
+        count: cat.count
+      })),
+      recentTrend: recentTrend.map(trend => ({
+        date: trend._id,
+        published: trend.count
+      })),
+      topNews: topNews.map(news => ({
+        id: news._id,
+        title: news.title,
+        views: news.views,
+        category: news.category,
+        publishedAt: news.createdAt
+      }))
+    };
+
+    res.json({
+      success: true,
+      data: stats,
+      timestamp: new Date()
+    });
+
+  } catch (error) {
+    console.error('News stats error:', error);
+    res.status(500).json({
+      error: 'Server Error',
+      message: 'Lỗi server khi lấy thống kê tin tức'
+    });
+  }
+});
+
+// @route   PATCH /api/news/:id/status
+// @desc    Quick status update for admin
+// @access  Private (Admin only)
+router.patch('/:id/status', [
+  body('status')
+    .isIn(['draft', 'published', 'archived'])
+    .withMessage('Trạng thái không hợp lệ')
+], auth, adminOnly, async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        error: 'Validation Error',
+        message: 'Trạng thái không hợp lệ',
+        details: errors.array()
+      });
+    }
+
+    const newsId = req.params.id;
+    const { status } = req.body;
+    
+    const news = await News.findById(newsId);
+    if (!news) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Không tìm thấy tin tức'
+      });
+    }
+
+    // Update status and publishedAt if publishing
+    const updateData = { status };
+    if (status === 'published' && news.status !== 'published') {
+      updateData.publishedAt = new Date();
+    }
+
+    const updatedNews = await News.findByIdAndUpdate(
+      newsId,
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    res.json({
+      success: true,
+      message: `Đã chuyển tin tức thành ${status === 'published' ? 'xuất bản' : status === 'draft' ? 'nháp' : 'lưu trữ'}`,
+      data: {
+        id: updatedNews._id,
+        status: updatedNews.status,
+        publishedAt: updatedNews.publishedAt
+      }
+    });
+
+  } catch (error) {
+    console.error('Status update error:', error);
+    res.status(500).json({
+      error: 'Server Error',
+      message: 'Lỗi server khi cập nhật trạng thái'
+    });
+  }
+});
+
+// @route   PATCH /api/news/:id/toggle-breaking
+// @desc    Toggle breaking news status (Admin only)
+// @access  Private (Admin only)
+router.patch('/:id/toggle-breaking', auth, adminOnly, async (req, res) => {
+  try {
+    const newsId = req.params.id;
+    
+    const news = await News.findById(newsId);
+    if (!news) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Không tìm thấy tin tức'
+      });
+    }
+
+    news.isBreaking = !news.isBreaking;
+    await news.save();
+
+    res.json({
+      success: true,
+      message: `Đã ${news.isBreaking ? 'đánh dấu' : 'bỏ đánh dấu'} tin nóng`,
+      data: {
+        id: news._id,
+        isBreaking: news.isBreaking
+      }
+    });
+
+  } catch (error) {
+    console.error('Toggle breaking error:', error);
+    res.status(500).json({
+      error: 'Server Error',
+      message: 'Lỗi server khi cập nhật tin nóng'
+    });
+  }
+});
+
+// @route   PATCH /api/news/:id/toggle-featured
+// @desc    Toggle featured news status (Admin only)
+// @access  Private (Admin only)
+router.patch('/:id/toggle-featured', auth, adminOnly, async (req, res) => {
+  try {
+    const newsId = req.params.id;
+    
+    const news = await News.findById(newsId);
+    if (!news) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Không tìm thấy tin tức'
+      });
+    }
+
+    news.isFeatured = !news.isFeatured;
+    await news.save();
+
+    res.json({
+      success: true,
+      message: `Đã ${news.isFeatured ? 'đánh dấu' : 'bỏ đánh dấu'} tin nổi bật`,
+      data: {
+        id: news._id,
+        isFeatured: news.isFeatured
+      }
+    });
+
+  } catch (error) {
+    console.error('Toggle featured error:', error);
+    res.status(500).json({
+      error: 'Server Error',
+      message: 'Lỗi server khi cập nhật tin nổi bật'
     });
   }
 });
