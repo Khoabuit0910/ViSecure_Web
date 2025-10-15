@@ -440,4 +440,65 @@ router.post('/logout', auth, (req, res) => {
   });
 });
 
+// @route   GET /api/auth/verify
+// @desc    Verify token and get user info
+// @access  Private
+router.get('/verify', auth, async (req, res) => {
+  try {
+    const user = req.userModel || await User.findById(req.user.userId);
+    
+    if (!user || user.status !== 'active') {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid Token',
+        message: 'Token không hợp lệ hoặc tài khoản đã bị khóa'
+      });
+    }
+
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role,
+        permissions: user.permissions,
+        status: user.status,
+        createdAt: user.createdAt,
+        lastLogin: user.lastLogin
+      }
+    });
+  } catch (error) {
+    console.error('Verify token error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Server Error',
+      message: 'Lỗi server khi xác thực token'
+    });
+  }
+});
+
+// @route   GET /api/auth/check-admin
+// @desc    Check if admin exists
+// @access  Public
+router.get('/check-admin', async (req, res) => {
+  try {
+    const adminCount = await User.countDocuments({ role: 'admin', status: 'active' });
+    
+    res.json({
+      success: true,
+      hasAdmin: adminCount > 0,
+      adminCount
+    });
+  } catch (error) {
+    console.error('Check admin error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Server Error',
+      message: 'Lỗi server khi kiểm tra admin'
+    });
+  }
+});
+
 module.exports = router;
