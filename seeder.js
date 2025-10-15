@@ -100,9 +100,6 @@ const seedUsers = async () => {
 
   } catch (error) {
     console.error('❌ Error seeding users:', error);
-  } finally {
-    mongoose.disconnect();
-    console.log('🔌 Disconnected from MongoDB');
   }
 };
 

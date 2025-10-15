@@ -561,4 +561,205 @@ router.post('/seed', async (req, res) => {
   }
 });
 
+// @route   POST /api/admin/seed-data
+// @desc    Seed initial data (temporary endpoint for Railway deployment)
+// @access  Private (Admin only)
+router.post('/seed-data', auth, adminOnly, async (req, res) => {
+  try {
+    // Check if news already exists
+    const existingNews = await News.countDocuments();
+    if (existingNews > 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'Dữ liệu đã tồn tại',
+        data: { existingCount: existingNews }
+      });
+    }
+
+    // Get admin user for author reference
+    const adminUser = await User.findOne({ username: 'admin' });
+    if (!adminUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy admin user'
+      });
+    }
+
+    const sampleNews = [
+      {
+        title: 'Phát hiện lỗ hổng bảo mật nghiêm trọng trong hệ điều hành phổ biến',
+        summary: 'Các chuyên gia bảo mật vừa phát hiện một lỗ hổng bảo mật nghiêm trọng ảnh hưởng đến hàng triệu thiết bị trên toàn thế giới. Người dùng cần cập nhật ngay để bảo vệ dữ liệu cá nhân.',
+        content: `<h2>Lỗ hổng bảo mật nghiêm trọng được phát hiện</h2>
+      <p>Các nhà nghiên cứu bảo mật vừa công bố phát hiện một lỗ hổng bảo mật nghiêm trọng ảnh hưởng đến hàng triệu thiết bị sử dụng hệ điều hành phổ biến. Lỗ hổng này có thể cho phép kẻ tấn công từ xa thực thi mã độc và chiếm quyền kiểm soát thiết bị.</p>
+      
+      <h3>Chi tiết lỗ hổng</h3>
+      <p>Lỗ hổng được mã hóa là CVE-2024-XXXX, có mức độ nghiêm trọng cao với điểm CVSS 9.8/10. Nó nằm trong thành phần xử lý giao thức mạng và có thể bị khai thác mà không cần xác thực.</p>
+      
+      <h3>Khuyến nghị bảo mật</h3>
+      <p>Người dùng được khuyến nghị thực hiện ngay các biện pháp sau:</p>
+      <ol>
+        <li>Cập nhật hệ điều hành lên phiên bản mới nhất</li>
+        <li>Bật tường lửa và cấu hình quy tắc bảo mật</li>
+        <li>Theo dõi hoạt động bất thường trên thiết bị</li>
+        <li>Sao lưu dữ liệu quan trọng</li>
+      </ol>`,
+        category: 'cybersecurity',
+        tags: ['lỗ hổng bảo mật', 'cập nhật', 'khẩn cấp', 'cve'],
+        author: {
+          name: adminUser.fullName,
+          email: adminUser.email
+        },
+        status: 'published',
+        priority: 'urgent',
+        publishedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), // 1 day ago
+        views: Math.floor(Math.random() * 3000) + 1000,
+        likes: Math.floor(Math.random() * 200) + 50,
+        shares: 0,
+        readingTime: 1,
+        seoMetadata: { keywords: [] },
+        isBreaking: true,
+        isFeatured: true
+      },
+      {
+        title: '10 mẹo bảo mật cơ bản mọi người dùng internet nên biết',
+        summary: 'Trong thời đại số hóa, việc bảo vệ thông tin cá nhân trên internet là vô cùng quan trọng. Dưới đây là 10 mẹo bảo mật đơn giản nhưng hiệu quả mà mọi người nên áp dụng.',
+        content: `<h2>10 Mẹo Bảo Mật Internet Thiết Yếu</h2>
+      <p>Bảo mật thông tin cá nhân trên internet không còn là điều tùy chọn mà là điều bắt buộc. Dưới đây là những mẹo quan trọng nhất:</p>
+      
+      <h3>1. Sử dụng mật khẩu mạnh và duy nhất</h3>
+      <p>Mật khẩu nên có ít nhất 12 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt.</p>
+      
+      <h3>2. Kích hoạt xác thực hai yếu tố (2FA)</h3>
+      <p>2FA thêm một lớp bảo vệ quan trọng cho tài khoản của bạn.</p>`,
+        category: 'tips',
+        tags: ['bảo mật', 'mẹo hay', 'hướng dẫn', 'người dùng'],
+        author: {
+          name: adminUser.fullName,
+          email: adminUser.email
+        },
+        status: 'published',
+        priority: 'normal',
+        publishedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
+        views: Math.floor(Math.random() * 4000) + 2000,
+        likes: Math.floor(Math.random() * 300) + 100,
+        shares: 0,
+        readingTime: 1,
+        seoMetadata: { keywords: [] },
+        isBreaking: false,
+        isFeatured: true
+      },
+      {
+        title: 'Cảnh báo: Chiến dịch tấn công ransomware mới nhắm vào doanh nghiệp SME',
+        summary: 'Một chiến dịch ransomware mới đang nhắm vào các doanh nghiệp vừa và nhỏ tại Việt Nam. Hacker sử dụng phương thức tấn công tinh vi qua email giả mạo hóa đơn.',
+        content: `<h2>Cảnh Báo Ransomware Mới</h2>
+      <p>Các chuyên gia an ninh mạng đã phát hiện một chiến dịch tấn công ransomware quy mô lớn đang nhắm vào các doanh nghiệp SME tại Việt Nam và Đông Nam Á.</p>
+      
+      <h3>Phương thức tấn công</h3>
+      <p>Hacker gửi email giả mạo hóa đơn hoặc đơn hàng với file đính kèm chứa mã độc.</p>`,
+        category: 'alerts',
+        tags: ['ransomware', 'cảnh báo', 'doanh nghiệp', 'sme'],
+        author: {
+          name: adminUser.fullName,
+          email: adminUser.email
+        },
+        status: 'published',
+        priority: 'high',
+        publishedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
+        views: Math.floor(Math.random() * 2500) + 1500,
+        likes: Math.floor(Math.random() * 150) + 75,
+        shares: 0,
+        readingTime: 1,
+        seoMetadata: { keywords: [] },
+        isBreaking: true,
+        isFeatured: false
+      },
+      {
+        title: 'Malware mới trên Android: Trojan ngân hàng nguy hiểm đánh cắp OTP',
+        summary: 'Phát hiện loại malware mới trên Android có khả năng đánh cắp mã OTP và thông tin thẻ ngân hàng. Hơn 100,000 thiết bị đã bị nhiễm tại Việt Nam.',
+        content: `<h2>Cảnh Báo Trojan Ngân Hàng Mới</h2>
+      <p>Các nhà nghiên cứu bảo mật đã phát hiện một biến thể mới của trojan ngân hàng trên Android với khả năng đánh cắp mã OTP và thông tin nhạy cảm.</p>`,
+        category: 'malware',
+        tags: ['android', 'trojan', 'ngân hàng', 'otp'],
+        author: {
+          name: adminUser.fullName,
+          email: adminUser.email
+        },
+        status: 'published',
+        priority: 'urgent',
+        publishedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000), // 4 days ago
+        views: Math.floor(Math.random() * 5000) + 3000,
+        likes: Math.floor(Math.random() * 400) + 200,
+        shares: 0,
+        readingTime: 1,
+        seoMetadata: { keywords: [] },
+        isBreaking: true,
+        isFeatured: false
+      },
+      {
+        title: 'Rò rỉ dữ liệu lớn: 500 triệu tài khoản người dùng bị lộ thông tin',
+        summary: 'Một công ty công nghệ lớn vừa xác nhận vụ rò rỉ dữ liệu ảnh hưởng đến 500 triệu người dùng trên toàn cầu. Thông tin cá nhân, email và số điện thoại bị lộ.',
+        content: `<h2>Vụ Rò Rỉ Dữ Liệu Quy Mô Lớn</h2>
+      <p>Một trong những vụ rò rỉ dữ liệu lớn nhất trong năm vừa được phát hiện, ảnh hưởng đến hàng trăm triệu người dùng trên toàn thế giới.</p>`,
+        category: 'data-breach',
+        tags: ['rò rỉ dữ liệu', 'data breach', 'bảo mật'],
+        author: {
+          name: adminUser.fullName,
+          email: adminUser.email
+        },
+        status: 'published',
+        priority: 'high',
+        publishedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
+        views: Math.floor(Math.random() * 6000) + 4000,
+        likes: Math.floor(Math.random() * 500) + 300,
+        shares: 0,
+        readingTime: 1,
+        seoMetadata: { keywords: [] },
+        isBreaking: true,
+        isFeatured: false
+      },
+      {
+        title: 'Xu hướng bảo mật năm 2025: AI và Machine Learning dẫn đầu',
+        summary: 'Công nghệ AI và Machine Learning đang thay đổi cách chúng ta bảo vệ dữ liệu. Tìm hiểu về các xu hướng bảo mật hàng đầu sẽ định hình năm 2025.',
+        content: `<h2>Xu Hướng Bảo Mật 2025</h2>
+      <p>Ngành an ninh mạng đang chứng kiến những thay đổi lớn với sự phát triển của AI, cloud computing và IoT.</p>`,
+        category: 'trends',
+        tags: ['ai', 'xu hướng', '2025', 'machine learning'],
+        author: {
+          name: adminUser.fullName,
+          email: adminUser.email
+        },
+        status: 'published',
+        priority: 'normal',
+        publishedAt: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000), // 6 days ago
+        views: Math.floor(Math.random() * 3000) + 1500,
+        likes: Math.floor(Math.random() * 250) + 100,
+        shares: 0,
+        readingTime: 1,
+        seoMetadata: { keywords: [] },
+        isBreaking: false,
+        isFeatured: true
+      }
+    ];
+
+    await News.insertMany(sampleNews);
+
+    res.status(201).json({
+      success: true,
+      message: 'Dữ liệu mẫu đã được tạo thành công',
+      data: {
+        newsCount: sampleNews.length,
+        createdAt: new Date()
+      }
+    });
+
+  } catch (error) {
+    console.error('Seed data error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi khi tạo dữ liệu mẫu',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;
